@@ -18,7 +18,7 @@ class Chance:
 		@return:  List of Matches.
 		"""
 
-		self.parseMatches(self.__getHtml("https://live.chance.cz/", "<div class=\"subbox on\">"))
+		self.__parseMatches(self.__getHtml("https://live.chance.cz/", "<div class=\"subbox on\">"))
 	
 	def __getHtml(self, url, grepString):
 		"""
@@ -222,7 +222,7 @@ class Chance:
 		setNumber = match.ActualSet - 1
 
 		if (match.ActualSet >= 2) and match.Players[0].Sets[setNumber] == 0 and prevMatch.Players[1].Sets[setNumber] == 0:
-			setNumber = match.ActualSet - 2
+			setNumber = match.ActualSet - 1
 
 		if prevMatch.Players[0].Serve:
 			if (match.Players[0].Sets[setNumber]).isdigit() and (prevMatch.Players[0].Sets[setNumber]).isdigit():
@@ -278,15 +278,14 @@ if  __name__ == "__main__":
 			match = ch.getMatchInfo(id)
 
 			# ask if match end
-			if ch.checkIfMatchEnd(match):
+			if ch.checkIfMatchEnd(match) or match.Gems is 0:
 				# if match is in activeMatches, remove it from active matches
 				if match in activeMatches:
 					activeMatches.remove(match)
 				# delete match id from ch.MatchesIds
 				ch.MatchesIds.remove(id)
 
-				# if match is stil active, print last score
-				if match.Gems is not 0:
+				if match.Gems is not 0: 
 					print match
 
 			#if match not end
