@@ -18,24 +18,32 @@ class Chance:
 		@return:  List of Matches.
 		"""
 
-		self.__parseMatches(self.__getHtml("https://live.chance.cz/", "<div class=\"subbox on\">"))
+		self.__parseMatches(self.__grep(self.__getHtml("https://live.chance.cz/"), "<div class=\"subbox on\">"))
 	
-	def __getHtml(self, url, grepString):
+	def __getHtml(self, url):
 		"""
 		Get generated html source.
 
 		@type  url: string
 		@param url: Url of page witch source code we want download.
-		@type  grepString: string
-		@param grepString: Parameter for grep.
 		@rtype:   string
 		@return:  Source html code. 
 		"""
 
-		p1 = subprocess.Popen(["./phantomjs", "chance.js", url], stdout=subprocess.PIPE)
-		p2 = subprocess.Popen(["grep", grepString], stdin=p1.stdout, stdout=subprocess.PIPE)
-		p1.stdout.close()
-		return p2.communicate()[0]
+		command = subprocess.Popen(["./phantomjs", "chance.js", url], stdout=subprocess.PIPE)
+		return command.communicate()[0]
+
+	def __grep(self, data, grepString):
+		"""
+		Grep html source.
+		
+		@type  grepString: string
+		@param grepString: Parameter for grep.
+		@rtype:   string
+		@return:  Greped data.
+		"""
+		command = subprocess.Popen(["grep", grepString], stdin=data, stdout=subprocess.PIPE)
+		return command.communicate()[0]
 
 	def getMatchInfo(self, id):
 		"""
@@ -48,7 +56,9 @@ class Chance:
 		"""
 
 		matchUrl = "https://live.chance.cz/chance/ChanceLiveOddsAction.do?matchId="
-		match = self.__parseMatchInfo(self.__getHtml(matchUrl + id, "<div class=\"stats_box\">"), id)
+		data = self.__getHtml(matchUrl + id)
+		match = self.__parseMatchInfo(self.__grep(data, "<div class=\"stats_box\">"), id)
+		match = self.__parseMatchBets(self.__grep(data, "<div id=\"main-bets\" class=\"mbox\">"), match)
 		return match
 
 	def __parseMatches(self, matchesHtml):
@@ -74,13 +84,46 @@ class Chance:
 			if isTenis and "<li data-id=\"" in tag:
 				self.MatchesIds.append(tag.replace("<li data-id=", "").replace("\"", ""))
 
-	def __parseMatchInfo(self, matchHtml, id):
+	def __parseMatchBets(self, grepedMatchHtml, match)
 		"""
-		Takse source of page with detail of match and get match info
+		Take source of page and get bets info.
+
+		@type  grepedMatchHtml: string
+		@param grepedMatchHtml: Html source of page with detail.
+		@type  match: Match
+		@param match: Match.
+
+		@rtype:   Match
+		@return:  Match.
+		"""
+		tags = matchHtml.split('>')
+		set = 0
+		gem = 0
+		nextIsExchange = False
+		for tag in tags:
+			if tag[15:] == ". setu</h3":
+				set = (int)(tag[14])
+				match.Player[0].Exchanges.append([])
+				match.Player[1].Exchanges.append([])
+				continue
+			if set is not 0:
+				if tag[1:] == ". gamu</strong":
+					gem = (int)(tag[0])
+					continue
+				if gem is not 0:
+					if tag == "<span class=\"kurz\"":
+						nextIsExchange = True
+						continue
+					if nextIsExchange:
+						match.Player[0].Exchanges[set - 1][gem - 1] = (float)(tag.replace("</span", ""))
+
+	def __parseMatchInfo(self, grepedMatchHtml, id):
+		"""
+		Take source of page with detail of match and get match info
 		(score, who play, ...)
 
-		@type  matchHtml: string
-		@param matchHtml: Html source of page with detail.
+		@type  grepedMatchHtml: string
+		@param grepedMatchHtml: Html source of page with detail.
 		@type  id: int
 		@param id: Id of match.
 		@rtype:   Match
@@ -210,7 +253,7 @@ class Chance:
 			if (match.Players[0].WonSets == 3 or match.Players[1].WonSets == 3):
                                 return True
 
-	def CheckIfPlayerWinHisServe(self, match, prevMatch):
+	def CheckIfPlayerWinHisServe(self, match, prevMatch, g):
 		"""
 		Check if player won when he had serve.
 
@@ -221,8 +264,8 @@ class Chance:
 		"""
 		setNumber = match.ActualSet - 1
 
-		if (match.ActualSet >= 2) and match.Players[0].Sets[setNumber] == 0 and prevMatch.Players[1].Sets[setNumber] == 0:
-			setNumber = match.ActualSet - 1
+		if str(match.ActualSet) >= "2" and str(match.Players[0].Sets[setNumber]) == "0" and str(match.Players[1].Sets[setNumber]) == "0":
+			setNumber = match.ActualSet - 2
 
 		if prevMatch.Players[0].Serve:
 			if (match.Players[0].Sets[setNumber]).isdigit() and (prevMatch.Players[0].Sets[setNumber]).isdigit():
@@ -230,6 +273,7 @@ class Chance:
 		elif prevMatch.Players[1].Serve:
 			if (match.Players[1].Sets[setNumber]).isdigit() and (prevMatch.Players[1].Sets[setNumber]).isdigit():
 				return ((int)(match.Players[1].Sets[setNumber]) - 1 == (int)(prevMatch.Players[1].Sets[setNumber]))
+		return match
 
 class Player:
 	"""
@@ -242,6 +286,7 @@ class Player:
 		self.Serve = False
 		self.Sets = []
 		self.WonSets = 0
+		self.Exchanges = []
 
 	def __str__(self):
 		return self.Name + "\t" + str(int(self.Serve)) + "\t" + "_".join(map(str, self.Sets))
@@ -264,8 +309,15 @@ class Match:
 	def __str__(self):
 		return self.Id + "\t" + str(self.Gems) + "\t" + str(self.Players[0]) + "\t" + str(self.Players[1])
 
+class Game:
+	def __init__(self):
+		self.Money = 1000.0
+		self.Bet = 100.0
+		self.Exchange = 1.50
+
 if  __name__ == "__main__":
 	ch = Chance()
+	g = Game()
 	activeMatches = []
 	while True:
 		#load new match
@@ -295,12 +347,17 @@ if  __name__ == "__main__":
 					for activeMatch in activeMatches:
 						if activeMatch.Id == match.Id and activeMatch.Gems is not match.Gems:
 							# print "1" if player win his serve, print "0" if not
-							print ch.CheckIfPlayerWinHisServe(match, activeMatch)
+							ifPlayerWin = ch.CheckIfPlayerWinHisServe(match, activeMatch, g)
 							# update match info
 							activeMatches.remove(activeMatch)
 							activeMatches.append(match)
+
+							if ifPlayerWin:
+								g.Money = g.Money + (g.Bet * g.Exchange - g.Bet)
+							else:
+								g.Money = g.Money - g.Bet
 							# print match info
-							print match
+							print "%s %s %s CZK" % (match, ifPlayerWin, g.Money)
 				# if match not founded, add it to active matches and print
 				else:
 					activeMatches.append(match)
